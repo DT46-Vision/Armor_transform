@@ -1,19 +1,17 @@
 import cv2
 import numpy as np
-from Camera import Camera
 
-class ArmorDetector:
-    def __init__(self, camera):
-        self.camera = camera
+class Transform:
+    def __init__(self):
+        pass
 
-    def run(self):
-        while True:
-            frame = self.camera.get_frame()
+    def detect(self, frame):
+        try:
+            # 处理图像，获取处理后的帧、黄色掩码和角点列表
             processed_frame, yellow_mask, corner_points_list = self.process_frame(frame)
 
-            # 显示原始图像
-            cv2.imshow('Yellow', processed_frame)
-            cv2.imshow('Mask', yellow_mask)
+            # 默认 warped_img 为输入图像的副本，防止未赋值
+            warped_img = frame.copy()
 
             # 如果检测到角点，进行透视变换
             if corner_points_list:
@@ -39,14 +37,22 @@ class ArmorDetector:
                         if H is not None:
                             # 应用透视变换
                             warped_img = cv2.warpPerspective(frame, H, (target_width, target_height))
-                            cv2.imshow(f'Warped Armor {idx}', warped_img)
+                            break  # 只处理第一个有效的四边形
+                        else:
+                            print("Homography 矩阵计算失败，使用默认图像")
+                    else:
+                        print(f"角点数量错误: {len(corner_points)}，需为 4")
+            else:
+                print("未检测到角点，使用默认图像")
 
-            if cv2.waitKey(1) == ord('q'):
-                break
+            return processed_frame, yellow_mask, warped_img
 
-        cv2.destroyAllWindows()
+        except Exception as e:
+            print(f"Transform.detect 错误: {e}")
+            # 返回默认图像以防止节点崩溃
+            return frame.copy(), np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)), frame.copy()
 
-    def preprocess_image(self, img, resize_shape=(640, 480), brightness_factor=0.3, threshold_val=50):
+    def preprocess_image(self, img, resize_shape=(640, 480), brightness_factor=5, threshold_val=50):
         img_resized = cv2.resize(img, resize_shape)
         img_dark = cv2.convertScaleAbs(img_resized, alpha=brightness_factor)
         img_gray = cv2.cvtColor(img_dark, cv2.COLOR_BGR2GRAY)
@@ -108,9 +114,3 @@ class ArmorDetector:
                         print(f"  四边形 {idx}: {points}")
 
         return resized_img, yellow_mask, corner_points_list
-
-
-if __name__ == "__main__":
-    camera = Camera(0)
-    detector = ArmorDetector(camera)
-    detector.run()
